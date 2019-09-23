@@ -192,10 +192,9 @@ void dcd_init (uint8_t rhport)
     USB_OTG_GINTSTS_USBRST | USB_OTG_GINTSTS_ENUMDNE | \
     USB_OTG_GINTSTS_ESUSP | USB_OTG_GINTSTS_USBSUSP | USB_OTG_GINTSTS_SOF;
 
-  // Required as part of core initialization. Disable OTGINT as we don't use
-  // it right now. TODO: How should mode mismatch be handled? It will cause
-  // the core to stop working/require reset.
-  USB_OTG_FS->GINTMSK |= /* USB_OTG_GINTMSK_OTGINT | */ USB_OTG_GINTMSK_MMISM;
+  // Required as part of core initialization. TODO: How should mode mismatch be
+  // handled? It will cause the core to stop working/require reset.
+  USB_OTG_FS->GINTMSK |= USB_OTG_GINTMSK_OTGINT | USB_OTG_GINTMSK_MMISM;
 
   USB_OTG_DeviceTypeDef * dev = DEVICE_BASE;
 
@@ -457,6 +456,20 @@ void dcd_edpt_clear_stall (uint8_t rhport, uint8_t ep_addr)
 
 /*------------------------------------------------------------------*/
 
+static void handle_otg_event(void) {
+  uint32_t int_status = USB_OTG_FS->GOTGINT;
+
+  if(int_status & USB_OTG_GOTGINT_SEDET) {
+    USB_OTG_FS->GOTGINT = USB_OTG_GOTGINT_SEDET;
+    dcd_event_bus_signal(0, DCD_EVENT_UNPLUGGED, true);
+  }
+
+  if(int_status & ~USB_OTG_GOTGINT_SEDET) {
+    // We don't support OTG, and we don't know how to handle other events.
+    TU_BREAKPOINT();
+  }
+}
+
 // TODO: Split into "receive on endpoint 0" and "receive generic"; endpoint 0's
 // DOEPTSIZ register is smaller than the others, and so is insufficient for
 // determining how much of an OUT transfer is actually remaining.
@@ -686,6 +699,10 @@ void OTG_FS_IRQHandler(void) {
   if(int_status & USB_OTG_GINTSTS_SOF) {
     USB_OTG_FS->GINTSTS = USB_OTG_GINTSTS_SOF;
     dcd_event_bus_signal(0, DCD_EVENT_SOF, true);
+  }
+
+  if(int_status & USB_OTG_GINTSTS_OTGINT) {
+    handle_otg_event();
   }
 
   if(int_status & USB_OTG_GINTSTS_RXFLVL) {
