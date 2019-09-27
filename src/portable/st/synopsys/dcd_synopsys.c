@@ -149,15 +149,15 @@ static void bus_reset(void) {
 }
 
 static void end_of_reset(void) {
-  USB_OTG_DeviceTypeDef * dev = DEVICE_BASE;
+  // USB_OTG_DeviceTypeDef * dev = DEVICE_BASE;
   USB_OTG_INEndpointTypeDef * in_ep = IN_EP_BASE;
   // On current silicon on the Full Speed core, speed is fixed to Full Speed.
   // However, keep for debugging and in case Low Speed is ever supported.
-  uint32_t enum_spd = (dev->DSTS & USB_OTG_DSTS_ENUMSPD_Msk) >> USB_OTG_DSTS_ENUMSPD_Pos;
+  // uint32_t enum_spd = (dev->DSTS & USB_OTG_DSTS_ENUMSPD_Msk) >> USB_OTG_DSTS_ENUMSPD_Pos;
 
   // Maximum packet size for EP 0 is set for both directions by writing
   // DIEPCTL.
-  if(enum_spd == 0x03) {
+  if(false) {
     // 64 bytes
     in_ep[0].DIEPCTL &= ~(0x03 << USB_OTG_DIEPCTL_MPSIZ_Pos);
     xfer_status[0][TUSB_DIR_OUT].max_size = 64;
@@ -648,6 +648,10 @@ static void handle_epin_ints(USB_OTG_DeviceTypeDef * dev, USB_OTG_INEndpointType
       // IN XFER complete (entire xfer).
       if(in_ep[n].DIEPINT & USB_OTG_DIEPINT_XFRC) {
         in_ep[n].DIEPINT = USB_OTG_DIEPINT_XFRC;
+        if(xfer->total_len > (xfer->queued_len + CFG_TUD_ENDOINT0_SIZE) && !(xfer->total_len == 0))
+        {
+          TU_BREAKPOINT();
+        }
         dev->DIEPEMPMSK &= ~(1 << n); // Turn off TXFE b/c xfer inactive.
         dcd_event_xfer_complete(0, n | TUSB_DIR_IN_MASK, xfer->total_len, XFER_RESULT_SUCCESS, true);
       }

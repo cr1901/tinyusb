@@ -1,4 +1,4 @@
-/* 
+/*
  * The MIT License (MIT)
  *
  * Copyright (c) 2019 Ha Thach (tinyusb.org)
@@ -46,6 +46,7 @@ typedef struct {
     volatile uint8_t connected    : 1;
     volatile uint8_t configured   : 1;
     volatile uint8_t suspended    : 1;
+    volatile uint8_t ep0_size_known : 1;
 
     uint8_t remote_wakeup_en      : 1; // enable/disable by host
     uint8_t remote_wakeup_support : 1; // configuration descriptor's attribute
@@ -214,6 +215,8 @@ bool usbd_init (void)
 
 static void usbd_reset(uint8_t rhport)
 {
+  uint8_t ep0_size_known = _usbd_dev.ep0_size_known;
+
   tu_varclr(&_usbd_dev);
 
   memset(_usbd_dev.itf2drv, DRVID_INVALID, sizeof(_usbd_dev.itf2drv)); // invalid mapping
@@ -225,6 +228,12 @@ static void usbd_reset(uint8_t rhport)
   {
     if ( usbd_class_drivers[i].reset ) usbd_class_drivers[i].reset( rhport );
   }
+
+  // The endpoint size is known by the host as soon as the first
+  // "Get Device Descriptor" request succeeds. This knowledge survives a reset
+  // (but not a device disconnect).
+
+  _usbd_dev.ep0_size_known = ep0_size_known & 0x01;
 }
 
 /* USB Device Driver task
@@ -648,7 +657,15 @@ static bool process_get_descriptor(uint8_t rhport, tusb_control_request_t const 
   switch(desc_type)
   {
     case TUSB_DESC_DEVICE:
-      return tud_control_xfer(rhport, p_request, (void*) tud_descriptor_device_cb(), sizeof(tusb_desc_device_t));
+      #if CFG_TUD_ENDOINT0_SIZE < 32
+        if(!_usbd_dev.ep0_size_known)
+        {
+          bool rc = tud_control_xfer(rhport, p_request, (void*) tud_descriptor_device_cb(), CFG_TUD_ENDOINT0_SIZE);
+          _usbd_dev.ep0_size_known = 1;
+          return rc;
+        }
+      #endif
+        return tud_control_xfer(rhport, p_request, (void*) tud_descriptor_device_cb(), sizeof(tusb_desc_device_t));
     break;
 
     case TUSB_DESC_BOS:
@@ -718,6 +735,7 @@ void dcd_event_handler(dcd_event_t const * event, bool in_isr)
       _usbd_dev.connected = 0;
       _usbd_dev.configured = 0;
       _usbd_dev.suspended = 0;
+      _usbd_dev.ep0_size_known = 0;
       osal_queue_send(_usbd_q, event, in_isr);
     break;
 

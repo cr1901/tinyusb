@@ -69,7 +69,7 @@
 // DEVICE CONFIGURATION
 //--------------------------------------------------------------------
 
-#define CFG_TUD_ENDOINT0_SIZE    64
+#define CFG_TUD_ENDOINT0_SIZE    8
 
 //------------- CLASS -------------//
 #define CFG_TUD_CDC              1
